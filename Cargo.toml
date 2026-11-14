@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/platform",
+    "crates/database",
+    "crates/cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["InstallMon Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/ankur/installmon"
+
+[workspace.dependencies]
+installmon-core = { path = "crates/core" }
+installmon-platform = { path = "crates/platform" }
+installmon-database = { path = "crates/database" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+regex = "1.10"
+libc = "0.2"
+nix = { version = "0.29", features = ["user", "fs", "process"] }
