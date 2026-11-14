@@ -118,7 +118,23 @@ Static release binaries are built for all major Linux CPU architectures:
 
 ## Getting Started
 
-### Prerequisites
+### Direct Binary Download
+
+Standalone, statically linked binaries are provided for all architectures on the [GitHub Releases](https://github.com/ankur3-101106/installmon/releases) page. No package manager or archive extraction needed:
+
+```bash
+# Example for x86_64:
+curl -LO https://github.com/ankur3-101106/installmon/releases/download/v0.1.0/installmon-linux-x86_64
+chmod +x installmon-linux-x86_64
+sudo mv installmon-linux-x86_64 /usr/local/bin/installmon
+
+# Example for ARM64 (aarch64):
+curl -LO https://github.com/ankur3-101106/installmon/releases/download/v0.1.0/installmon-linux-aarch64
+chmod +x installmon-linux-aarch64
+sudo mv installmon-linux-aarch64 /usr/local/bin/installmon
+```
+
+### Prerequisites for Building from Source
 
 - Linux (x86_64, AArch64, RISC-V, etc.)
 - Rust 1.80+ (tested on Rust 1.99+)
