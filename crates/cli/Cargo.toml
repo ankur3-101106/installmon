@@ -17,6 +17,7 @@ path = "src/bin/installmon.rs"
 installmon-core.workspace = true
 installmon-platform.workspace = true
 installmon-database.workspace = true
+installmon-tui.workspace = true
 clap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

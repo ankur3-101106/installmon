@@ -4,6 +4,7 @@ members = [
     "crates/core",
     "crates/platform",
     "crates/database",
+    "crates/tui",
     "crates/cli",
 ]
 
@@ -18,6 +19,7 @@ repository = "https://github.com/ankur/installmon"
 installmon-core = { path = "crates/core" }
 installmon-platform = { path = "crates/platform" }
 installmon-database = { path = "crates/database" }
+installmon-tui = { path = "crates/tui" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

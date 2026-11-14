@@ -13,6 +13,9 @@ Cargo.lock
 *.log
 /tmp/
 .coverage/
+dist/
+*.tar.gz
+*.sha256
 
 # IDE / Editor files
 .idea/

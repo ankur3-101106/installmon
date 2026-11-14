@@ -22,6 +22,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Launch interactive Terminal User Interface (TUI)
+    #[arg(long, global = true)]
+    pub tui: bool,
+
     /// Explicit path to SQLite database file
     #[arg(short = 'd', long = "database", global = true)]
     pub database: Option<PathBuf>,
@@ -39,11 +43,14 @@ pub struct Cli {
     pub quiet: bool,
 
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Launch interactive Terminal User Interface (TUI)
+    Tui,
+
     /// Show service status, database health, and active monitoring scope
     Status,
 
@@ -136,7 +143,12 @@ pub fn run() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| database_path(is_system));
 
-    match cli.command {
+    if cli.tui || matches!(cli.command, Some(Commands::Tui)) || cli.command.is_none() {
+        return installmon_tui::run_tui(db);
+    }
+
+    match cli.command.unwrap() {
+        Commands::Tui => unreachable!(),
         Commands::Status => {
             commands::status::execute(&db, cli.json, &db_path)?;
         }
