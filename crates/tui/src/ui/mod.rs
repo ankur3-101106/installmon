@@ -2,6 +2,7 @@ pub mod audit;
 pub mod dashboard;
 pub mod events;
 pub mod help;
+pub mod service;
 pub mod sessions;
 pub mod software;
 
@@ -33,6 +34,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         CurrentTab::Sessions => sessions::render(frame, app, chunks[1]),
         CurrentTab::Events => events::render(frame, app, chunks[1]),
         CurrentTab::Audit => audit::render(frame, app, chunks[1]),
+        CurrentTab::Service => service::render(frame, app, chunks[1]),
     }
 
     render_footer(frame, app, chunks[2]);
@@ -132,30 +134,37 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
     let keys = Line::from(vec![
         Span::styled(
-            "[1..5/Tab]",
+            "[1..6/Tab]",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" Switch  "),
+        Span::raw(" Tabs  "),
         Span::styled(
-            "[↑/↓/j/k]",
+            "[S]",
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" Navigate  "),
+        Span::raw(" Svc Toggle  "),
+        Span::styled(
+            "[I]",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Svc Setup  "),
         Span::styled(
             "[s]",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Scan  "),
         Span::styled(
             "[r]",
             Style::default()
-                .fg(Color::Green)
+                .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Refresh  "),

@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
+use installmon_platform::service::ServiceState;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let cols = Layout::default()
@@ -16,13 +17,104 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
 
     let left_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .constraints([
+            Constraint::Length(6), // Background Service Daemon Summary
+            Constraint::Min(7),    // Host & Platform Environment
+            Constraint::Min(5),    // Active Monitoring Backends
+        ])
         .split(cols[0]);
 
     let right_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .constraints([Constraint::Length(8), Constraint::Min(10)])
         .split(cols[1]);
+
+    // 0. Background Monitoring Service Summary
+    let svc = &app.service_status;
+    let (svc_color, svc_badge) = match svc.state {
+        ServiceState::Running => (
+            Color::Green,
+            format!(
+                "● RUNNING (PID: {}, Uptime: {})",
+                svc.pid
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "Active".to_string()),
+                svc.uptime_seconds
+                    .map(|u| format!("{}s", u))
+                    .unwrap_or_else(|| "N/A".to_string())
+            ),
+        ),
+        ServiceState::Stopped => (
+            Color::Yellow,
+            "○ STOPPED (Installed but inactive)".to_string(),
+        ),
+        ServiceState::NotInstalled => (
+            Color::Red,
+            "! NOT INSTALLED (Press [I] to set up)".to_string(),
+        ),
+    };
+
+    let svc_lines = vec![
+        Line::from(vec![
+            Span::styled("Service State : ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                svc_badge,
+                Style::default().fg(svc_color).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" | "),
+            Span::styled("Type: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                svc.service_type.to_string(),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Operation     : ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                if svc.state == ServiceState::Running {
+                    "Autonomous daemon is actively recording software installations."
+                } else {
+                    "Service inactive. Press [I] to setup systemd unit, [S] to toggle."
+                },
+                Style::default().fg(if svc.state == ServiceState::Running {
+                    Color::White
+                } else {
+                    Color::Yellow
+                }),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Quick Actions : ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "[I] Setup Service",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" | "),
+            Span::styled(
+                "[S] Start/Stop",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" | "),
+            Span::styled(
+                "[6] Centralized Service View",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+    ];
+
+    let svc_block = Paragraph::new(svc_lines).block(
+        Block::default()
+            .title(" Background Monitoring Service ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(svc_color)),
+    );
+    frame.render_widget(svc_block, left_rows[0]);
 
     // 1. Host & Platform Info
     let caps = &app.capabilities;
@@ -102,7 +194,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Blue)),
     );
-    frame.render_widget(platform_block, left_rows[0]);
+    frame.render_widget(platform_block, left_rows[1]);
 
     // 2. Active Monitoring Backends
     let active_backend_lines = vec![
@@ -130,10 +222,9 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
-        Line::from(""),
         Line::from(vec![
             Span::styled("Strategy: ", Style::default().fg(Color::DarkGray)),
-            Span::raw("Continuous event-driven capture with dynamic graceful degradation."),
+            Span::raw("Continuous event capture with automatic graceful degradation."),
         ]),
     ];
 
@@ -143,7 +234,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan)),
     );
-    frame.render_widget(backend_block, left_rows[1]);
+    frame.render_widget(backend_block, left_rows[2]);
 
     // 3. Database & Observability Counters
     let db_path = app

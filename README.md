@@ -78,6 +78,21 @@ installmon/
 
 ---
 
+## Continuous Background Service & TUI Centralization
+
+InstallMon is designed around an **autonomous continuous background service** and an **interactive single-pane-of-glass TUI**:
+
+- **Continuous Background Daemon**:
+  - Runs in the background (as a systemd user service `~/.config/systemd/user/installmon.service`, a system daemon `/etc/systemd/system/installmon.service`, or a standalone background process).
+  - Continuously monitors filesystem directories (`/usr/local/bin`, `~/.local/bin`, `~/.cargo/bin`, `/opt`, etc.) via inotify for file creation, modifications, symlinks, and permission changes.
+  - Continuously monitors active processes via `/proc` for package managers (`apt`, `pacman`, `dnf`), language installers (`cargo`, `pip`, `npm`), build systems (`make`, `cmake`), downloads (`curl`, `wget`), and archive tools (`tar`).
+  - Records events, sessions, and provenance into the shared offline SQLite database in real-time.
+- **Centralized TUI Management**:
+  - The TUI provides complete centralized control over the background service: setup, start, stop, restart, enable boot auto-start, and view live activity.
+  - The user opens the TUI to view status or audit records on demand; closing the TUI leaves the background service running undisturbed.
+
+---
+
 ## Interactive TUI Mode
 
 Launch the full interactive Terminal User Interface:
@@ -92,12 +107,18 @@ installmon
 
 | Keybinding | Action |
 | :--- | :--- |
-| `1` .. `5` / `Tab` | Switch between Dashboard, Software, Sessions, Events, Audit |
+| `1` .. `6` / `Tab` | Switch between Dashboard, Software, Sessions, Events, Audit, **Service** |
+| `I` / `i` | **Setup & Start Service**: Installs systemd unit, enables, and starts background monitoring |
+| `S` | **Start / Stop Service**: Toggle background daemon active state |
+| `R` | **Restart Service**: Restart the background daemon |
+| `e` | **Toggle Auto-Start**: Enable/disable automatic startup on system boot or login |
+| `b` | **Spawn Standalone Daemon**: Launch detached background process (works without systemd) |
+| `u` | **Uninstall Service Unit**: Cleanly stop and delete systemd unit file |
+| `s` | Trigger system PATH binary discovery scan |
+| `r` | Refresh database, active capabilities, and service heartbeat |
 | `↑` / `↓` / `j` / `k` | Navigate items in tables and lists |
-| `s` | Trigger system PATH discovery scan |
-| `r` | Refresh database state and capabilities |
 | `?` | Toggle Help modal overlay |
-| `q` / `Esc` / `Ctrl+C` | Quit InstallMon TUI |
+| `q` / `Esc` / `Ctrl+C` | Quit InstallMon TUI (Background daemon remains running) |
 
 ---
 
@@ -159,6 +180,27 @@ cargo fmt --check
 ---
 
 ## CLI Usage
+
+Manage continuous background monitoring service:
+```bash
+# Check service state and daemon heartbeat:
+installmon service status
+
+# Install systemd unit, enable, and start daemon:
+installmon service setup
+
+# Start / stop / restart service:
+installmon service start
+installmon service stop
+installmon service restart
+
+# Enable / disable boot/login auto-start:
+installmon service enable
+installmon service disable
+
+# Run continuous monitoring daemon in foreground:
+installmon daemon
+```
 
 Inspect system status:
 ```bash

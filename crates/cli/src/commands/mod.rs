@@ -5,6 +5,7 @@ pub mod export;
 pub mod history;
 pub mod inspect;
 pub mod scan;
+pub mod service;
 pub mod sessions;
 pub mod software;
 pub mod status;

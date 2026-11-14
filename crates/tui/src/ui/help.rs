@@ -20,23 +20,57 @@ pub fn render(frame: &mut Frame) {
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                "  Tab / 1..5       ",
+                "  Tab / 1..6       ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(
-                "Switch between navigation views (Dashboard, Software, Sessions, Events, Audit)",
-            ),
+            Span::raw("Switch tabs (Dashboard, Software, Sessions, Events, Audit, Service)"),
         ]),
         Line::from(vec![
             Span::styled(
-                "  ↑ / ↓ / j / k    ",
+                "  I / i            ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Setup & start background systemd/user monitoring service"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  S                ",
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw("Scroll / navigate items in tables"),
+            Span::raw("Toggle background service (Start / Stop daemon)"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  R                ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Restart background service daemon"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  e                ",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Toggle service auto-start on system boot / login"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  b                ",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Launch detached background daemon (standalone fallback)"),
         ]),
         Line::from(vec![
             Span::styled(
@@ -58,9 +92,18 @@ pub fn render(frame: &mut Frame) {
         ]),
         Line::from(vec![
             Span::styled(
-                "  ? / h            ",
+                "  ↑ / ↓ / j / k    ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Scroll / navigate items in tables"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  ?                ",
+                Style::default()
+                    .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("Toggle this Help modal"),

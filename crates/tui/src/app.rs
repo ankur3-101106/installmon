@@ -12,6 +12,11 @@ use installmon_core::event::Event;
 use installmon_core::provenance::InstallationScope;
 use installmon_database::{Database, SessionRecord, SoftwareRecord};
 use installmon_platform::detect_platform_capabilities;
+use installmon_platform::service::{
+    disable_service, enable_service, get_service_status, install_and_start_service,
+    restart_service, spawn_standalone_daemon, start_service, stop_service, uninstall_service,
+    ServiceState, ServiceStatusInfo,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurrentTab {
@@ -20,6 +25,7 @@ pub enum CurrentTab {
     Sessions = 2,
     Events = 3,
     Audit = 4,
+    Service = 5,
 }
 
 impl CurrentTab {
@@ -29,27 +35,30 @@ impl CurrentTab {
             Self::Software => Self::Sessions,
             Self::Sessions => Self::Events,
             Self::Events => Self::Audit,
-            Self::Audit => Self::Dashboard,
+            Self::Audit => Self::Service,
+            Self::Service => Self::Dashboard,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Dashboard => Self::Audit,
+            Self::Dashboard => Self::Service,
             Self::Software => Self::Dashboard,
             Self::Sessions => Self::Software,
             Self::Events => Self::Sessions,
             Self::Audit => Self::Events,
+            Self::Service => Self::Audit,
         }
     }
 
-    pub fn titles() -> [&'static str; 5] {
+    pub fn titles() -> [&'static str; 6] {
         [
             "[1] Dashboard",
             "[2] Software",
             "[3] Sessions",
             "[4] Events",
             "[5] Audit",
+            "[6] Service",
         ]
     }
 }
@@ -61,6 +70,7 @@ pub struct App {
 
     // Data
     pub capabilities: PlatformCapabilities,
+    pub service_status: ServiceStatusInfo,
     pub software_list: Vec<SoftwareRecord>,
     pub sessions_list: Vec<SessionRecord>,
     pub events_list: Vec<Event>,
@@ -79,11 +89,13 @@ pub struct App {
 impl App {
     pub fn new(db: Database) -> Self {
         let caps = detect_platform_capabilities();
+        let service_status = get_service_status(caps.is_root);
         Self {
             db,
             current_tab: CurrentTab::Dashboard,
             showing_help: false,
             capabilities: caps,
+            service_status,
             software_list: Vec::new(),
             sessions_list: Vec::new(),
             events_list: Vec::new(),
@@ -93,7 +105,7 @@ impl App {
             selected_session: 0,
             selected_event: 0,
             status_message: Some((
-                "InstallMon TUI ready. Press '?' for help.".to_string(),
+                "InstallMon TUI ready. Press '?' for help, '6' for Service.".to_string(),
                 Instant::now(),
             )),
         }
@@ -101,6 +113,7 @@ impl App {
 
     pub fn refresh(&mut self) -> Result<()> {
         self.capabilities = detect_platform_capabilities();
+        self.service_status = get_service_status(self.capabilities.is_root);
         self.software_list = self.db.get_all_software().unwrap_or_default();
         self.sessions_list = self.db.get_sessions(100).unwrap_or_default();
         self.events_list = self.db.get_events(100, 0, None, None).unwrap_or_default();
@@ -224,6 +237,77 @@ impl App {
         Ok(count)
     }
 
+    pub fn setup_service(&mut self) {
+        let is_root = self.capabilities.is_root;
+        match install_and_start_service(is_root) {
+            Ok(msg) => self.set_status(format!("✓ {}", msg)),
+            Err(e) => self.set_status(format!("✗ Setup failed: {}", e)),
+        }
+        let _ = self.refresh();
+    }
+
+    pub fn toggle_service(&mut self) {
+        let is_root = self.capabilities.is_root;
+        if self.service_status.state == ServiceState::Running {
+            match stop_service(is_root) {
+                Ok(msg) => self.set_status(format!("✓ {}", msg)),
+                Err(e) => self.set_status(format!("✗ Stop failed: {}", e)),
+            }
+        } else {
+            match start_service(is_root) {
+                Ok(msg) => self.set_status(format!("✓ {}", msg)),
+                Err(e) => self.set_status(format!("✗ Start failed: {}", e)),
+            }
+        }
+        let _ = self.refresh();
+    }
+
+    pub fn restart_service(&mut self) {
+        let is_root = self.capabilities.is_root;
+        match restart_service(is_root) {
+            Ok(msg) => self.set_status(format!("✓ {}", msg)),
+            Err(e) => self.set_status(format!("✗ Restart failed: {}", e)),
+        }
+        let _ = self.refresh();
+    }
+
+    pub fn toggle_autostart(&mut self) {
+        let is_root = self.capabilities.is_root;
+        if self.service_status.is_enabled {
+            match disable_service(is_root) {
+                Ok(msg) => self.set_status(format!("✓ {}", msg)),
+                Err(e) => self.set_status(format!("✗ Disable failed: {}", e)),
+            }
+        } else {
+            match enable_service(is_root) {
+                Ok(msg) => self.set_status(format!("✓ {}", msg)),
+                Err(e) => self.set_status(format!("✗ Enable failed: {}", e)),
+            }
+        }
+        let _ = self.refresh();
+    }
+
+    pub fn spawn_standalone(&mut self) {
+        let is_root = self.capabilities.is_root;
+        match spawn_standalone_daemon(is_root) {
+            Ok(pid) => self.set_status(format!(
+                "✓ Standalone background daemon spawned (PID: {})",
+                pid
+            )),
+            Err(e) => self.set_status(format!("✗ Spawn failed: {}", e)),
+        }
+        let _ = self.refresh();
+    }
+
+    pub fn uninstall_service(&mut self) {
+        let is_root = self.capabilities.is_root;
+        match uninstall_service(is_root) {
+            Ok(msg) => self.set_status(format!("✓ {}", msg)),
+            Err(e) => self.set_status(format!("✗ Uninstall failed: {}", e)),
+        }
+        let _ = self.refresh();
+    }
+
     pub fn handle_key(&mut self, code: KeyCode) {
         if self.showing_help {
             if matches!(
@@ -250,10 +334,31 @@ impl App {
             KeyCode::Char('3') => self.current_tab = CurrentTab::Sessions,
             KeyCode::Char('4') => self.current_tab = CurrentTab::Events,
             KeyCode::Char('5') => self.current_tab = CurrentTab::Audit,
+            KeyCode::Char('6') => self.current_tab = CurrentTab::Service,
+
+            // Centralized Service Controls
+            KeyCode::Char('I') | KeyCode::Char('i') => {
+                self.setup_service();
+            }
+            KeyCode::Char('S') => {
+                self.toggle_service();
+            }
+            KeyCode::Char('R') => {
+                self.restart_service();
+            }
+            KeyCode::Char('e') if self.current_tab == CurrentTab::Service => {
+                self.toggle_autostart();
+            }
+            KeyCode::Char('b') if self.current_tab == CurrentTab::Service => {
+                self.spawn_standalone();
+            }
+            KeyCode::Char('u') if self.current_tab == CurrentTab::Service => {
+                self.uninstall_service();
+            }
 
             KeyCode::Char('r') => {
                 let _ = self.refresh();
-                self.set_status("Refreshed database state.");
+                self.set_status("Refreshed database and service state.");
             }
             KeyCode::Char('s') => {
                 self.set_status("Scanning PATH for binaries...");

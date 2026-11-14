@@ -7,6 +7,7 @@ use installmon_database::Database;
 use installmon_platform::database_path;
 
 pub mod commands;
+pub mod daemon;
 pub mod logging;
 
 #[derive(Parser, Debug)]
@@ -124,6 +125,37 @@ pub enum Commands {
         #[arg(short = 'o', long)]
         out: Option<PathBuf>,
     },
+
+    /// Run the continuous background monitoring daemon (observes processes and filesystem)
+    Daemon,
+
+    /// Manage continuous background service (setup, start, stop, restart, status)
+    Service {
+        #[command(subcommand)]
+        action: Option<ServiceAction>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ServiceAction {
+    /// Show service state, PID, uptime, and live daemon heartbeat
+    Status,
+    /// Install systemd service unit and start background monitoring
+    Setup,
+    /// Install systemd service unit and start background monitoring (alias for setup)
+    Install,
+    /// Start the background service
+    Start,
+    /// Stop the background service
+    Stop,
+    /// Restart the background service
+    Restart,
+    /// Enable service auto-start on system boot or login
+    Enable,
+    /// Disable service auto-start on system boot or login
+    Disable,
+    /// Cleanly uninstall the service unit
+    Uninstall,
 }
 
 pub fn run() -> Result<()> {
@@ -188,6 +220,21 @@ pub fn run() -> Result<()> {
         } => {
             commands::export::execute(&db, &format, &entity, out)?;
         }
+        Commands::Daemon => {
+            daemon::run_daemon(is_system, &db)?;
+        }
+        Commands::Service { action } => match action.unwrap_or(ServiceAction::Status) {
+            ServiceAction::Status => commands::service::execute_status(is_system, cli.json)?,
+            ServiceAction::Setup | ServiceAction::Install => {
+                commands::service::execute_setup(is_system)?
+            }
+            ServiceAction::Start => commands::service::execute_start(is_system)?,
+            ServiceAction::Stop => commands::service::execute_stop(is_system)?,
+            ServiceAction::Restart => commands::service::execute_restart(is_system)?,
+            ServiceAction::Enable => commands::service::execute_enable(is_system)?,
+            ServiceAction::Disable => commands::service::execute_disable(is_system)?,
+            ServiceAction::Uninstall => commands::service::execute_uninstall(is_system)?,
+        },
     }
 
     Ok(())

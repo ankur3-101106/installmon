@@ -27,3 +27,4 @@ chrono.workspace = true
 uuid.workspace = true
 anyhow.workspace = true
 libc.workspace = true
+nix.workspace = true
