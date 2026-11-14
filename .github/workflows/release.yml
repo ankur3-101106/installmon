@@ -19,32 +19,32 @@ jobs:
         include:
           # x86_64 (Intel / AMD 64-bit) - Statically linked with musl for universal compatibility
           - target: x86_64-unknown-linux-musl
-            name: installmon-v0.1.0-linux-x86_64.tar.gz
+            binary_name: installmon-linux-x86_64
             use_cross: true
 
           # aarch64 (ARM 64-bit / Raspberry Pi 4/5 / Apple Silicon Linux / AWS Graviton)
           - target: aarch64-unknown-linux-musl
-            name: installmon-v0.1.0-linux-aarch64.tar.gz
+            binary_name: installmon-linux-aarch64
             use_cross: true
 
           # armv7 (ARM 32-bit Hard-Float / Raspberry Pi 2/3)
           - target: armv7-unknown-linux-musleabihf
-            name: installmon-v0.1.0-linux-armv7.tar.gz
+            binary_name: installmon-linux-armv7
             use_cross: true
 
           # riscv64 (RISC-V 64-bit)
           - target: riscv64gc-unknown-linux-gnu
-            name: installmon-v0.1.0-linux-riscv64.tar.gz
+            binary_name: installmon-linux-riscv64
             use_cross: true
 
           # powerpc64le (PowerPC 64-bit Little Endian)
           - target: powerpc64le-unknown-linux-gnu
-            name: installmon-v0.1.0-linux-powerpc64le.tar.gz
+            binary_name: installmon-linux-powerpc64le
             use_cross: true
 
           # s390x (IBM System z / Mainframe)
           - target: s390x-unknown-linux-gnu
-            name: installmon-v0.1.0-linux-s390x.tar.gz
+            binary_name: installmon-linux-s390x
             use_cross: true
 
     steps:
@@ -63,21 +63,17 @@ jobs:
         run: |
           cross build --release --target ${{ matrix.target }} --bin installmon
 
-      - name: Package release archive
+      - name: Prepare standalone binary
         run: |
           mkdir -p staging
-          cp target/${{ matrix.target }}/release/installmon staging/
-          cp README.md LICENSE staging/
-          tar -czvf ${{ matrix.name }} -C staging installmon README.md LICENSE
-          sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
+          cp target/${{ matrix.target }}/release/installmon staging/${{ matrix.binary_name }}
+          chmod +x staging/${{ matrix.binary_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
-          path: |
-            ${{ matrix.name }}
-            ${{ matrix.name }}.sha256
+          name: ${{ matrix.binary_name }}
+          path: staging/${{ matrix.binary_name }}
 
   publish-release:
     name: Publish GitHub Release
@@ -92,12 +88,14 @@ jobs:
         with:
           path: release-artifacts
 
-      - name: Collate SHA256SUMS
+      - name: Collate Release Binaries & SHA256SUMS
         run: |
           mkdir -p release-dist
-          find release-artifacts -type f -name "*.tar.gz" -exec cp {} release-dist/ \;
-          find release-artifacts -type f -name "*.sha256" -exec cat {} + > release-dist/SHA256SUMS
-          cd release-dist && sha256sum --check SHA256SUMS || true
+          find release-artifacts -type f -name "installmon-linux-*" -exec cp {} release-dist/ \;
+          chmod +x release-dist/*
+          cd release-dist
+          sha256sum installmon-linux-* > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Create or update GitHub Release
         env:
