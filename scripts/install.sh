@@ -241,37 +241,72 @@ install_installmon() {
     fi
 
     echo ""
-    log_info "Downloading release package (${TARGET_TRIPLE})..."
-
-    local archive_name="installmon-${LATEST_VERSION}-${TARGET_TRIPLE}.tar.gz"
-    local download_url="${GITHUB_BASE}/releases/download/${LATEST_VERSION}/${archive_name}"
-    local checksums_url="${GITHUB_BASE}/releases/download/${LATEST_VERSION}/SHA256SUMS"
+    log_info "Fetching release package from GitHub Releases (${LATEST_VERSION})..."
 
     TMP_DIR="$(mktemp -d -t installmon-install.XXXXXX)"
     trap 'rm -rf "${TMP_DIR:-}"' EXIT INT TERM
 
-    if ! curl -fsSL --retry 3 "${download_url}" -o "${TMP_DIR}/${archive_name}"; then
-        log_error "Failed to download ${download_url}."
+    local checksums_url="${GITHUB_BASE}/releases/download/${LATEST_VERSION}/SHA256SUMS"
+    curl -fsSL --retry 3 "${checksums_url}" -o "${TMP_DIR}/SHA256SUMS" 2>/dev/null || true
+
+    # Candidate release assets in order of preference:
+    # 1. Multi-arch release tarballs (musl static universal first, then gnu)
+    # 2. Standalone direct binary format (used in v0.1.0 release assets)
+    local candidate_assets=(
+        "installmon-${LATEST_VERSION}-${TARGET_TRIPLE}.tar.gz"
+        "installmon-${LATEST_VERSION}-${TARGET_ARCH}-unknown-linux-musl.tar.gz"
+        "installmon-${LATEST_VERSION}-${TARGET_ARCH}-unknown-linux-gnu.tar.gz"
+        "installmon-linux-${TARGET_ARCH}"
+    )
+
+    local downloaded_asset=""
+    local is_tarball=false
+
+    for asset in "${candidate_assets[@]}"; do
+        local try_url="${GITHUB_BASE}/releases/download/${LATEST_VERSION}/${asset}"
+        log_info "Checking release asset: ${asset}..."
+        if curl -fsSL --retry 2 "${try_url}" -o "${TMP_DIR}/${asset}" 2>/dev/null; then
+            if [[ -s "${TMP_DIR}/${asset}" ]]; then
+                downloaded_asset="${asset}"
+                if [[ "${asset}" == *.tar.gz ]]; then
+                    is_tarball=true
+                fi
+                log_success "Downloaded: ${downloaded_asset}"
+                break
+            fi
+        fi
+    done
+
+    if [[ -z "${downloaded_asset}" ]]; then
+        log_error "Could not find compatible release asset for ${TARGET_ARCH} in release ${LATEST_VERSION}."
         exit 1
     fi
 
     log_info "Verifying cryptographic SHA-256 checksum..."
-    if curl -fsSL --retry 3 "${checksums_url}" -o "${TMP_DIR}/SHA256SUMS"; then
+    if [[ -f "${TMP_DIR}/SHA256SUMS" ]]; then
         local expected_hash
-        expected_hash="$(grep -F "${archive_name}" "${TMP_DIR}/SHA256SUMS" | awk '{print $1}' || true)"
+        expected_hash="$(grep -F "${downloaded_asset}" "${TMP_DIR}/SHA256SUMS" | awk '{print $1}' | head -1 || true)"
         if [[ -n "${expected_hash}" ]]; then
             local actual_hash
-            actual_hash="$(sha256sum "${TMP_DIR}/${archive_name}" | awk '{print $1}')"
+            actual_hash="$(sha256sum "${TMP_DIR}/${downloaded_asset}" | awk '{print $1}')"
             if [[ "${expected_hash}" != "${actual_hash}" ]]; then
-                log_error "Checksum mismatch!\nExpected: ${expected_hash}\nActual:   ${actual_hash}"
+                log_error "Checksum mismatch for ${downloaded_asset}!\nExpected: ${expected_hash}\nActual:   ${actual_hash}"
                 exit 1
             fi
             log_success "Checksum verified: ${actual_hash:0:16}..."
+        else
+            log_warn "Asset '${downloaded_asset}' not listed in SHA256SUMS; skipping strict hash check."
         fi
     fi
 
-    log_info "Extracting binary..."
-    tar -xzf "${TMP_DIR}/${archive_name}" -C "${TMP_DIR}"
+    if [[ "${is_tarball}" == "true" ]]; then
+        log_info "Extracting binary from archive..."
+        tar -xzf "${TMP_DIR}/${downloaded_asset}" -C "${TMP_DIR}"
+    else
+        log_info "Preparing standalone binary..."
+        cp -f "${TMP_DIR}/${downloaded_asset}" "${TMP_DIR}/installmon"
+    fi
+    chmod +x "${TMP_DIR}/installmon"
 
     log_info "Placing binary in ${install_dir}/installmon..."
     if [[ "${is_system}" == "true" ]] && [[ $EUID -ne 0 ]]; then
