@@ -1,38 +1,89 @@
-# InstallMon
+<div align="center">
+
+# 📦 InstallMon
+
+**Linux Software Installation Monitoring & Provenance Tracking**
 
 [![CI](https://github.com/ankur3-101106/installmon/actions/workflows/ci.yml/badge.svg)](https://github.com/ankur3-101106/installmon/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ankur3-101106/installmon?color=blue&label=release)](https://github.com/ankur3-101106/installmon/releases)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.80.0%2B-orange.svg)](https://www.rust-lang.org/)
 [![Platform](https://img.shields.io/badge/Platform-Linux-brightgreen.svg)](docs/compatibility/matrix.md)
 [![Architecture](https://img.shields.io/badge/Architecture-x86__64%20%7C%20aarch64-blueviolet.svg)](docs/compatibility/matrix.md)
 
-> **Linux Software Installation Monitoring and Provenance Tracking.**
+<p align="center">
+  <a href="#-key-highlights">Highlights</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-terminal-ui-preview">TUI Preview</a> •
+  <a href="#-how-it-works">Architecture</a> •
+  <a href="docs/">Documentation Hub</a> •
+  <a href="docs/development/contributing.md">Contributing</a>
+</p>
 
-InstallMon observes how software enters, gets installed, and changes within a Linux host. It records installation workflows, reconstructs execution history, identifies installed software binaries, and maintains provenance records without wrapping package managers or modifying system execution flows.
-
----
-
-## The Problem It Solves
-
-Modern Linux systems accumulate software through disparate mechanisms—system package managers (`apt`, `pacman`, `dnf`), language ecosystem installers (`cargo`, `pip`, `npm`, `uv`, `go install`), source builds (`make`, `cmake`), ad-hoc scripts (`curl ... | bash`), and unpacked archives (`tar -xzf`).
-
-Most distributions only track software installed through their native package manager. Software installed via other vectors remains invisible to system audits, creating configuration drift, blind spots, and untracked binaries. **InstallMon closes this gap** by continuously monitoring installation activity and maintaining an offline, queryable provenance catalog.
-
----
-
-## Key Highlights
-
-- **Filesystem & Process Ingestion**: Multi-directory `inotify` observation on executable paths (`/usr/local/bin`, `~/.local/bin`, `~/.cargo/bin`) paired with periodic `/proc` process polling.
-- **Ingest-Time Secret Sanitization**: Built-in credential scrubber that redacts passwords, tokens, API keys, HTTP Authorization headers, URL credentials, and private keys before records touch disk.
-- **Session Correlation & Provenance**: Automatically links initiating commands, process ancestry (PID/PPID/UID/EUID), and filesystem mutations into structured installation sessions.
-- **Interactive Terminal UI (TUI)**: Rich [Ratatui](https://github.com/ratatui/ratatui) interface with 6 tabs (Dashboard, Software, Sessions, Events, Audit, Service) and direct background daemon management.
-- **12-Subcommand CLI with JSON Output**: Formatted terminal tables or machine-readable JSON (`--json`) across all inspection, querying, and export commands.
-- **Zero-Config Embedded SQLite (WAL Mode)**: Thread-safe local persistence with Write-Ahead Logging, automated schema migrations (`v1`), and integrity auditing.
-- **Universal Static Binaries**: Self-contained `musl` binaries for `x86_64` and `aarch64` with zero dynamic library dependencies.
+</div>
 
 ---
 
-## How It Works
+### What is InstallMon?
+
+**InstallMon** observes how software enters, gets installed, and changes within a Linux host. It records installation workflows, reconstructs execution history, identifies installed software binaries, and maintains provenance records—**without wrapping package managers or modifying system execution flows**.
+
+Modern Linux hosts accumulate software through many disconnected vectors—native package managers (`apt`, `pacman`, `dnf`), language ecosystem installers (`cargo`, `pip`, `npm`, `uv`, `go install`), source compilation (`make`, `cmake`), ad-hoc scripts (`curl ... | bash`), and unpacked archives (`tar -xzf`).
+
+Most distributions only track software installed through their native package manager. Software installed via other vectors remains invisible to system audits, creating configuration drift, blind spots, and untracked binaries. **InstallMon closes this gap** by operating non-invasively as a background observer and maintaining a local, queryable provenance catalog in SQLite WAL mode.
+
+---
+
+## ⚡ The InstallMon Difference
+
+| Traditional Linux System | With InstallMon Installed |
+| :--- | :--- |
+| ❌ Ad-hoc installs (`curl \| bash`) leave no audit trail | ✅ Every installer process & child execution is captured and correlated |
+| ❌ Binaries in `~/.local/bin` and `~/.cargo/bin` are untracked | ✅ Inotify directory watches automatically register newly placed binaries |
+| ❌ Plaintext credentials in scripts leak into shell history | ✅ Ingest-time scrubber redacts tokens, passwords, and private keys |
+| ❌ Missing or deleted executables cause silent failures | ✅ `installmon audit` checks physical filesystem state against database records |
+| ❌ Tool wrappers slow down execution pipelines | ✅ Completely out-of-band: zero wrappers, zero interceptors, zero slowdown |
+
+---
+
+## 🖥️ Terminal UI Preview
+
+InstallMon includes an interactive terminal user interface built with [Ratatui](https://github.com/ratatui/ratatui):
+
+```text
+┌─ InstallMon v0.1.0 ────────────────────────────────────────────────────────────────────────┐
+│  [1] Dashboard    [2] Software    [3] Sessions    [4] Events    [5] Audit    [6] Service   │
+├────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Host: Linux 6.8 [x86_64]   • Scope: User (Unprivileged)  • Mode: SQLite WAL (Normal sync)  │
+│ Backends: [procfs (800ms)] [inotify]                     • Daemon: Active (PID 4821)       │
+│ Database: 1,420 Events     • 14 Sessions                 • 64 Tracked Binaries             │
+├────────────────────────────────────────────────────────────────────────────────────────────┤
+│ TRACKED SOFTWARE INVENTORY                                                                 │
+│ NAME       SCOPE   DISCOVERED            PRIMARY BINARY PATH                               │
+│ ripgrep    User    2026-11-19 14:12:05   /home/user/.cargo/bin/rg                          │
+│ starship   User    2026-11-19 14:15:32   /home/user/.local/bin/starship                    │
+│ neovim     System  2026-11-19 14:18:10   /usr/local/bin/nvim                               │
+│ uv         User    2026-11-19 14:22:45   /home/user/.local/bin/uv                          │
+├────────────────────────────────────────────────────────────────────────────────────────────┤
+│ [1..6] Tabs | [j/k] Scroll | [s] Scan PATH | [r] Refresh | [?] Help Modal | [q] Exit       │
+└────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Key Highlights
+
+- **🔍 Filesystem & Process Ingestion**: Multi-directory `inotify` observation on executable paths (`/usr/local/bin`, `~/.local/bin`, `~/.cargo/bin`) paired with periodic `/proc` process polling.
+- **🛡️ Ingest-Time Secret Sanitization**: Built-in credential scrubber that redacts passwords, tokens, API keys, HTTP Authorization headers, URL credentials, and private keys before records touch disk.
+- **🔗 Session Correlation & Provenance**: Automatically links initiating commands, process ancestry (PID/PPID/UID/EUID), and filesystem mutations into structured installation sessions.
+- **🖥️ Interactive Terminal UI (TUI)**: Rich Ratatui interface with 6 tabs (Dashboard, Software, Sessions, Events, Audit, Service) and direct background daemon management.
+- **💻 12-Subcommand CLI with JSON Output**: Formatted terminal tables or machine-readable JSON (`--json`) across all inspection, querying, and export commands.
+- **🗄️ Zero-Config Embedded SQLite (WAL Mode)**: Thread-safe local persistence with Write-Ahead Logging, automated schema migrations (`v1`), and integrity auditing.
+- **📦 Universal Static Binaries**: Self-contained `musl` binaries for `x86_64` and `aarch64` with zero dynamic library dependencies.
+
+---
+
+## ⚙️ How It Works
 
 ```mermaid
 flowchart TD
@@ -76,7 +127,7 @@ flowchart TD
 
 ---
 
-## Quick Start
+## ⚡ Quick Start
 
 ### 1. Install via Unified Lifecycle Assistant (Recommended)
 
@@ -85,6 +136,9 @@ One command installs or updates InstallMon, verifies SHA-256 checksums, and opti
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/install.sh | bash
 ```
+
+> [!TIP]
+> The installer requires **zero root or sudo permissions** for User Mode (`~/.local/bin`). For system-wide deployment, choose System Mode (`/usr/local/bin`).
 
 ### 2. Take It for a Spin
 
@@ -120,7 +174,7 @@ Detailed technical guides, command specifications, and architectural documentati
 
 ---
 
-## CLI Commands at a Glance
+## 💻 CLI Commands at a Glance
 
 | Command | Summary | Reference |
 | :--- | :--- | :--- |
@@ -140,7 +194,7 @@ Detailed technical guides, command specifications, and architectural documentati
 
 ---
 
-## Development & Verification
+## 🛠️ Development & Verification
 
 Ensure you have Rust **1.80.0+** installed:
 
@@ -158,6 +212,6 @@ See the [Development & Contributing Guide](docs/development/contributing.md) for
 
 ---
 
-## License
+## 📄 License
 
 InstallMon is free software licensed under the **GNU General Public License Version 3 (GPL-3.0-only)**. See the [LICENSE](LICENSE) file for complete details.
