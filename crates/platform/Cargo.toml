@@ -2,8 +2,11 @@
 name = "installmon-platform"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Runtime environment, capability detection, and service management for InstallMon"
 
 [dependencies]
 installmon-core.workspace = true
@@ -13,6 +16,5 @@ chrono.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
-tracing.workspace = true
 libc.workspace = true
 nix.workspace = true

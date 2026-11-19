@@ -2,8 +2,11 @@
 name = "installmon-tui"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Terminal User Interface (TUI) powered by Ratatui for InstallMon"
 
 [dependencies]
 installmon-core.workspace = true

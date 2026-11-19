@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'docs/**'
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format-and-lint:
+    name: Code Formatting & Clippy Lints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Verify workspace formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy checks
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: Workspace Unit & Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        with:
+          toolchain: stable
+
+      - name: Run workspace tests
+        run: cargo test --workspace --verbose
+
+  build-release:
+    name: Release Binary Build & Smoke Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        with:
+          toolchain: stable
+
+      - name: Build release binaries
+        run: cargo build --workspace --release
+
+      - name: Smoke test binary help and version
+        run: |
+          ./target/release/installmon --version
+          ./target/release/installmon --help
+
+      - name: Smoke test status and capability inspection
+        run: |
+          ./target/release/installmon --database /tmp/smoke-test.db status
+          ./target/release/installmon --database /tmp/smoke-test.db status --json
+          ./target/release/installmon --database /tmp/smoke-test.db capabilities
+          ./target/release/installmon --database /tmp/smoke-test.db audit
+          rm -f /tmp/smoke-test.db*

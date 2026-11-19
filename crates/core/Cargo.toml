@@ -2,8 +2,11 @@
 name = "installmon-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Normalized event model, provenance tracking, and credential sanitization for InstallMon"
 
 [dependencies]
 serde.workspace = true

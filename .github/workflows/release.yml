@@ -1,111 +1,252 @@
-name: Multi-Architecture Release Binaries
+name: Multi-Architecture Release Pipeline
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release version tag to publish (e.g. v0.1.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  pre-release-verify:
+    name: Verify Release Integrity & Run Test Suite
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.determine-tag.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Determine and validate release tag
+        id: determine-tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            RELEASE_TAG="${{ github.event.inputs.tag }}"
+          else
+            RELEASE_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Release tag '${RELEASE_TAG}' is not valid semantic versioning (expected format: vMAJOR.MINOR.PATCH)" >&2
+            exit 1
+          fi
+
+          echo "Validated release tag: ${RELEASE_TAG}"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Prevent accidental clobbering of existing published releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.determine-tag.outputs.tag }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Error: Release ${RELEASE_TAG} already exists on GitHub. Refusing to overwrite published release." >&2
+            exit 1
+          fi
+          echo "Release ${RELEASE_TAG} does not exist yet. Safe to proceed."
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Verify workspace formatting
+        run: cargo fmt --all -- --check
+
+      - name: Verify clippy lints
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --workspace --verbose
+
   build-release:
     name: Build ${{ matrix.target }}
+    needs: pre-release-verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          # x86_64 (Intel / AMD 64-bit) - Statically linked with musl for universal compatibility
+          # x86_64 GNU/Linux (Standard glibc)
+          - target: x86_64-unknown-linux-gnu
+            archive_target: x86_64-unknown-linux-gnu
+            use_cross: false
+            is_static: false
+
+          # x86_64 Musl Linux (Statically linked universal binary)
           - target: x86_64-unknown-linux-musl
-            binary_name: installmon-linux-x86_64
+            archive_target: x86_64-unknown-linux-musl
             use_cross: true
+            is_static: true
 
-          # aarch64 (ARM 64-bit / Raspberry Pi 4/5 / Apple Silicon Linux / AWS Graviton)
+          # aarch64 GNU/Linux (ARM 64-bit glibc / Graviton / RPi 4/5)
+          - target: aarch64-unknown-linux-gnu
+            archive_target: aarch64-unknown-linux-gnu
+            use_cross: true
+            is_static: false
+
+          # aarch64 Musl Linux (ARM 64-bit statically linked musl)
           - target: aarch64-unknown-linux-musl
-            binary_name: installmon-linux-aarch64
+            archive_target: aarch64-unknown-linux-musl
             use_cross: true
-
-          # armv7 (ARM 32-bit Hard-Float / Raspberry Pi 2/3)
-          - target: armv7-unknown-linux-musleabihf
-            binary_name: installmon-linux-armv7
-            use_cross: true
-
-          # riscv64 (RISC-V 64-bit)
-          - target: riscv64gc-unknown-linux-gnu
-            binary_name: installmon-linux-riscv64
-            use_cross: true
-
-          # powerpc64le (PowerPC 64-bit Little Endian)
-          - target: powerpc64le-unknown-linux-gnu
-            binary_name: installmon-linux-powerpc64le
-            use_cross: true
-
-          # s390x (IBM System z / Mainframe)
-          - target: s390x-unknown-linux-gnu
-            binary_name: installmon-linux-s390x
-            use_cross: true
+            is_static: true
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Install cross-compilation tool (cross)
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build release binary with cross
+        if: ${{ matrix.use_cross }}
         run: |
-          cross build --release --target ${{ matrix.target }} --bin installmon
+          if ! command -v cross >/dev/null 2>&1; then
+            echo "Installing pre-built cross runner..."
+            curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+            cargo binstall -y cross || cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.5
+          fi
 
-      - name: Prepare standalone binary
+      - name: Build release binary
         run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} --bin installmon
+            echo "BINARY_PATH=target/${{ matrix.target }}/release/installmon" >> "$GITHUB_ENV"
+          else
+            cargo build --release --target ${{ matrix.target }} --bin installmon
+            echo "BINARY_PATH=target/${{ matrix.target }}/release/installmon" >> "$GITHUB_ENV"
+          fi
+
+      - name: Inspect binary executable and link characteristics
+        run: |
+          echo "=== File details ==="
+          file "${BINARY_PATH}"
+
+          if [ "${{ matrix.is_static }}" = "true" ]; then
+            echo "Verifying static linkage..."
+            if ! file "${BINARY_PATH}" | grep -q "statically linked"; then
+              echo "Error: Expected statically linked binary for target ${{ matrix.target }}" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Run host smoke test
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          "${BINARY_PATH}" --version
+          "${BINARY_PATH}" --help
+
+      - name: Package release archive
+        env:
+          RELEASE_TAG: ${{ needs.pre-release-verify.outputs.release_tag }}
+        run: |
+          ARCHIVE_NAME="installmon-${RELEASE_TAG}-${{ matrix.archive_target }}.tar.gz"
           mkdir -p staging
-          cp target/${{ matrix.target }}/release/installmon staging/${{ matrix.binary_name }}
-          chmod +x staging/${{ matrix.binary_name }}
+          cp "${BINARY_PATH}" staging/installmon
+          chmod 0755 staging/installmon
+          cp README.md LICENSE staging/
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          tar -czf "${ARCHIVE_NAME}" -C staging installmon README.md LICENSE
+          rm -rf staging
+
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload target archive artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: ${{ matrix.binary_name }}
-          path: staging/${{ matrix.binary_name }}
+          name: ${{ env.ARCHIVE_NAME }}
+          path: ${{ env.ARCHIVE_NAME }}
+          if-no-files-found: error
 
   publish-release:
-    name: Publish GitHub Release
-    needs: build-release
+    name: Collate Artifacts & Publish GitHub Release
+    needs: [pre-release-verify, build-release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
-          path: release-artifacts
+          path: downloaded-artifacts
 
-      - name: Collate Release Binaries & SHA256SUMS
+      - name: Collate Release Archives & Compute SHA256SUMS
+        env:
+          RELEASE_TAG: ${{ needs.pre-release-verify.outputs.release_tag }}
         run: |
           mkdir -p release-dist
-          find release-artifacts -type f -name "installmon-linux-*" -exec cp {} release-dist/ \;
-          chmod +x release-dist/*
+          find downloaded-artifacts -type f -name "installmon-*.tar.gz" -exec cp {} release-dist/ \;
+
           cd release-dist
-          sha256sum installmon-linux-* > SHA256SUMS
+          echo "Generated SHA256SUMS for release ${RELEASE_TAG}:"
+          sha256sum installmon-*.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
-      - name: Create or update GitHub Release
+          # Verify integrity of generated checksum file
+          sha256sum --check SHA256SUMS
+
+      - name: Generate Release Notes
+        env:
+          RELEASE_TAG: ${{ needs.pre-release-verify.outputs.release_tag }}
+        run: |
+          cat <<EOF > release-dist/RELEASE_NOTES.md
+          ## InstallMon ${RELEASE_TAG}
+
+          InstallMon is a Linux-native software installation monitoring and provenance tracking system written in Rust.
+
+          ### What's New & Highlights
+          - Verified multi-architecture release matrix supporting x86_64 and AArch64 (ARM64).
+          - Universal statically linked binaries (musl) and dynamically linked binaries (glibc).
+          - Integrated Ratatui terminal dashboard (TUI) with 6 views: Dashboard, Software, Sessions, Events, Audit, and Service.
+          - Autonomous continuous background daemon supporting systemd user/system services and standalone process mode.
+          - Inotify filesystem mutation monitoring and /proc process activity tracking.
+          - Sensitive credential, password, token, URL, and private key sanitization at ingest time.
+          - Embedded SQLite WAL-mode persistence with transactional event batching.
+
+          ### Supported Architectures & Binaries
+          - **x86_64-unknown-linux-gnu**: Standard Linux 64-bit (glibc)
+          - **x86_64-unknown-linux-musl**: Static standalone Linux 64-bit (musl)
+          - **aarch64-unknown-linux-gnu**: ARM 64-bit (glibc, Raspberry Pi 4/5, AWS Graviton)
+          - **aarch64-unknown-linux-musl**: Static standalone ARM 64-bit (musl)
+
+          ### Verification & Checksums
+          Verify archive authenticity using SHA256:
+          \`\`\`bash
+          sha256sum --check SHA256SUMS
+          \`\`\`
+
+          ### Installation
+          \`\`\`bash
+          # Download and unpack (example for x86_64 musl static):
+          curl -LO "https://github.com/ankur3-101106/installmon/releases/download/${RELEASE_TAG}/installmon-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz"
+          tar -xzf "installmon-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz"
+          chmod +x installmon
+          sudo mv installmon /usr/local/bin/installmon
+          \`\`\`
+          EOF
+
+      - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.pre-release-verify.outputs.release_tag }}
         run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          if [[ "$TAG_NAME" != v* ]]; then
-            TAG_NAME="v0.1.0"
-          fi
-          gh release create "$TAG_NAME" release-dist/* \
-            --title "InstallMon $TAG_NAME" \
-            --notes "InstallMon $TAG_NAME - Linux Software Installation Monitoring & Auditing System. Includes interactive Ratatui TUI and statically linked universal Linux binaries." \
-            --draft=false || gh release upload "$TAG_NAME" release-dist/* --clobber
+          gh release create "${RELEASE_TAG}" release-dist/* \
+            --title "InstallMon ${RELEASE_TAG}" \
+            --notes-file release-dist/RELEASE_NOTES.md \
+            --draft=false
