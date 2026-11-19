@@ -233,36 +233,28 @@ installmon/
 
 ## F. Installation
 
-### 1. Automated Installation Script (Recommended)
+### 1. Interactive Installation Assistant (Recommended)
 
-InstallMon includes an automated installation script that:
-- Detects the CPU architecture (`x86_64` or `aarch64`).
-- Detects the Linux distribution and C library (`glibc` or `musl`).
-- Downloads the matching release archive and verifies its SHA-256 checksum.
-- Installs the binary into your PATH (`~/.local/bin` for users or `/usr/local/bin` with `sudo`).
-- Optionally sets up and enables the background monitoring service.
-- Provides a clean uninstallation method.
+InstallMon includes a friendly, interactive setup assistant that automatically inspects your system and guides you through setup without requiring command-line flags:
+- Identifies CPU architecture (`x86_64` or `aarch64`).
+- Identifies Linux distribution and C library (`glibc` or `musl`).
+- Prompts for installation mode (User mode in `~/.local/bin` or System mode in `/usr/local/bin`).
+- Prompts to automatically configure and enable the continuous background daemon.
+- Downloads the verified static binary and verifies its SHA-256 hash.
+- Offers an integrated uninstallation wizard.
 
-#### One-Line Installation (User Mode):
+#### One-Line Interactive Run:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/scripts/install.sh | bash
 ```
 
-#### System-Wide Installation (Root / sudo):
+#### Run from Local Repository:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/scripts/install.sh | sudo bash -s -- --system
-```
+# Launch interactive installer:
+./install.sh
 
-#### Script Options & Uninstallation:
-```bash
-# Install specific version and auto-enable background service:
-bash scripts/install.sh --version v0.1.0 --service
-
-# Clean uninstallation (preserves database):
-bash scripts/install.sh --uninstall
-
-# Complete purge (removes binaries, systemd units, and databases):
-bash scripts/install.sh --uninstall --purge
+# Or directly launch uninstaller:
+./install.sh uninstall
 ```
 
 ### 2. Downloading Prebuilt Release Archives
