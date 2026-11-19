@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install stable Rust toolchain
-        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt, clippy
@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install stable Rust toolchain
-        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install stable Rust toolchain
-        uses: dtolnay/rust-toolchain@7b9dc014569528f898a129d363b963e6efaa5c60 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
