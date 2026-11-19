@@ -233,7 +233,39 @@ installmon/
 
 ## F. Installation
 
-### 1. Downloading Prebuilt Release Archives
+### 1. Automated Installation Script (Recommended)
+
+InstallMon includes an automated installation script that:
+- Detects the CPU architecture (`x86_64` or `aarch64`).
+- Detects the Linux distribution and C library (`glibc` or `musl`).
+- Downloads the matching release archive and verifies its SHA-256 checksum.
+- Installs the binary into your PATH (`~/.local/bin` for users or `/usr/local/bin` with `sudo`).
+- Optionally sets up and enables the background monitoring service.
+- Provides a clean uninstallation method.
+
+#### One-Line Installation (User Mode):
+```bash
+curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/scripts/install.sh | bash
+```
+
+#### System-Wide Installation (Root / sudo):
+```bash
+curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/scripts/install.sh | sudo bash -s -- --system
+```
+
+#### Script Options & Uninstallation:
+```bash
+# Install specific version and auto-enable background service:
+bash scripts/install.sh --version v0.1.0 --service
+
+# Clean uninstallation (preserves database):
+bash scripts/install.sh --uninstall
+
+# Complete purge (removes binaries, systemd units, and databases):
+bash scripts/install.sh --uninstall --purge
+```
+
+### 2. Downloading Prebuilt Release Archives
 
 Official release archives are published on the [GitHub Releases](https://github.com/ankur3-101106/installmon/releases) page.
 
@@ -266,7 +298,7 @@ tar -xzf "installmon-${VERSION}-aarch64-unknown-linux-musl.tar.gz"
 sudo install -m 0755 installmon /usr/local/bin/installmon
 ```
 
-### 2. Building from Source
+### 3. Building from Source
 
 Ensure a compatible Rust toolchain (1.80.0+) is installed:
 
@@ -285,7 +317,7 @@ cargo build --workspace --release
 sudo install -m 0755 target/release/installmon /usr/local/bin/installmon
 ```
 
-### 3. Installing via Cargo
+### 4. Installing via Cargo
 
 Install directly into `~/.cargo/bin`:
 
@@ -293,7 +325,7 @@ Install directly into `~/.cargo/bin`:
 cargo install --path crates/cli
 ```
 
-### 4. Running as a User vs System Service
+### 5. Running as a User vs System Service
 
 - **User Service (`systemd --user`)**:
   ```bash
