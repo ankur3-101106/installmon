@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# InstallMon - Interactive Linux Installation & Setup Assistant
+# InstallMon - Unified Lifecycle Assistant (Install / Update / Uninstall)
 #
-# Automatically identifies system architecture, distribution, and libc.
-# Interactively guides the user through installation, service configuration,
-# or uninstallation without requiring complex command-line arguments.
+# Single-command installation, updating, and uninstallation for InstallMon on Linux.
+# Detects CPU architecture, distribution, libc, and environment automatically.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/install.sh | bash
 #
 # Repository: https://github.com/ankur3-101106/installmon
 # ==============================================================================
@@ -16,7 +18,7 @@ GITHUB_BASE="https://github.com/${REPO}"
 GITHUB_API="https://api.github.com/repos/${REPO}"
 DEFAULT_VERSION="v0.1.0"
 
-# Styling & Colors (respects NO_COLOR and terminal capabilities)
+# Terminal formatting & colors
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
     C_RESET="\033[0m"
     C_BOLD="\033[1m"
@@ -37,7 +39,7 @@ else
     C_DIM=""
 fi
 
-print_header() {
+print_banner() {
     clear 2>/dev/null || true
     echo -e "${C_CYAN}${C_BOLD}"
     cat <<'EOF'
@@ -49,7 +51,7 @@ print_header() {
 EOF
     echo -e "${C_RESET}"
     echo -e " ${C_BOLD}Linux Software Installation Monitoring & Provenance Tracking${C_RESET}"
-    echo -e " ${C_DIM}Interactive Setup & Lifecycle Assistant${C_RESET}"
+    echo -e " ${C_DIM}Unified Lifecycle Assistant (Install • Update • Uninstall)${C_RESET}"
     echo "=================================================================="
 }
 
@@ -77,7 +79,7 @@ prompt_user() {
 
     echo -ne " ${C_YELLOW}${C_BOLD}[?]${C_RESET} ${prompt_text} " >&2
 
-    # Check non-interactive environment variable or CI
+    # Non-interactive fallback
     if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || [[ -n "${CI:-}" ]]; then
         echo "${default_value}" >&2
         echo "${default_value}"
@@ -103,9 +105,9 @@ prompt_user() {
 }
 
 # ==============================================================================
-# Detection
+# System & Hardware Detection
 # ==============================================================================
-detect_environment() {
+detect_system() {
     log_info "Detecting system specifications..."
 
     # 1. Operating System
@@ -115,7 +117,7 @@ detect_environment() {
         exit 1
     fi
 
-    # 2. Architecture
+    # 2. CPU Architecture
     RAW_ARCH="$(uname -m)"
     case "${RAW_ARCH}" in
         x86_64|amd64)
@@ -130,7 +132,7 @@ detect_environment() {
             ;;
     esac
 
-    # 3. Distribution
+    # 3. Distribution Identification
     DISTRO_NAME="Linux"
     DISTRO_ID="unknown"
     if [[ -f /etc/os-release ]]; then
@@ -145,7 +147,7 @@ detect_environment() {
         DETECTED_LIBC="musl"
     fi
 
-    # 5. Environment (WSL2 / Docker / Bare Metal)
+    # 5. Environment
     HOST_ENV="Bare Metal"
     if [[ -n "${WSL_DISTRO_NAME:-}" ]] || uname -r | grep -qi "microsoft"; then
         HOST_ENV="WSL2 (Windows Subsystem for Linux)"
@@ -155,60 +157,55 @@ detect_environment() {
         HOST_ENV="Podman Container"
     fi
 
+    # Release target triple: Statically linked musl is universal across all Linux distributions
+    TARGET_TRIPLE="${TARGET_ARCH}-unknown-linux-musl"
+
     echo "     * OS & Kernel    : Linux ($(uname -r))"
     echo "     * Architecture   : ${TARGET_ARCH} (${RAW_ARCH})"
     echo "     * Distribution   : ${DISTRO_NAME}"
     echo "     * C Library      : ${DETECTED_LIBC}"
     echo "     * Environment    : ${HOST_ENV}"
-    echo ""
-}
-
-resolve_version_and_target() {
-    # Resolve target: Default to universal static musl (compatible everywhere on Linux)
-    TARGET_TRIPLE="${TARGET_ARCH}-unknown-linux-musl"
-
-    # Query latest version from GitHub API with fallback
-    VERSION=""
-    if command -v curl >/dev/null 2>&1; then
-        VERSION="$(curl -sSfL -H "Accept: application/vnd.github.v3+json" "${GITHUB_API}/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
-    fi
-
-    if [[ -z "${VERSION}" ]]; then
-        VERSION="${DEFAULT_VERSION}"
-    fi
-
-    log_info "Installation Candidate:"
-    echo "     * Version        : ${VERSION}"
-    echo "     * Binary Target  : ${TARGET_TRIPLE} (Statically linked - zero dependencies)"
+    echo "     * Recommended    : ${TARGET_TRIPLE} (Static - zero dependencies)"
     echo ""
 }
 
 # Check if installmon is currently installed
-check_existing_installation() {
+check_installation_status() {
     EXISTING_BIN=""
+    EXISTING_VER=""
     for p in "${HOME}/.local/bin/installmon" "/usr/local/bin/installmon" "/usr/bin/installmon"; do
         if [[ -x "$p" ]]; then
             EXISTING_BIN="$p"
+            EXISTING_VER="$("${EXISTING_BIN}" --version 2>/dev/null || echo "installed")"
             break
         fi
     done
 
-    if [[ -n "${EXISTING_BIN}" ]]; then
-        local current_ver
-        current_ver="$("${EXISTING_BIN}" --version 2>/dev/null || echo "installed")"
-        log_info "Existing installation found at: ${C_BOLD}${EXISTING_BIN}${C_RESET} (${current_ver})"
-        echo ""
+    # Resolve latest available release tag
+    LATEST_VERSION=""
+    if command -v curl >/dev/null 2>&1; then
+        LATEST_VERSION="$(curl -sSfL -H "Accept: application/vnd.github.v3+json" "${GITHUB_API}/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
     fi
+    if [[ -z "${LATEST_VERSION}" ]]; then
+        LATEST_VERSION="${DEFAULT_VERSION}"
+    fi
+
+    if [[ -n "${EXISTING_BIN}" ]]; then
+        log_info "Status: Installed at ${C_BOLD}${EXISTING_BIN}${C_RESET} (${EXISTING_VER})"
+        echo "     * Latest Release : ${LATEST_VERSION}"
+    else
+        log_info "Status: Not currently installed on this system."
+        echo "     * Available Release: ${LATEST_VERSION}"
+    fi
+    echo ""
 }
 
 # ==============================================================================
-# Installation Workflow
+# Installation Routine
 # ==============================================================================
-perform_install() {
-    echo -e "${C_BOLD}--- Installation Configuration ---${C_RESET}"
-
-    # Prompt 1: Scope
-    echo " Select installation location:"
+install_installmon() {
+    echo -e "${C_BOLD}--- Installation Setup ---${C_RESET}"
+    echo " Choose installation location:"
     echo "   1) User Mode (~/.local/bin)     - Recommended (no root / sudo required)"
     echo "   2) System Mode (/usr/local/bin) - System-wide (requires root / sudo)"
     local scope_choice
@@ -225,31 +222,30 @@ perform_install() {
     echo ""
     log_info "Destination: ${install_dir}/installmon"
 
-    # Prompt 2: Service setup
+    # Background service prompt
     echo ""
     local enable_service_prompt
-    enable_service_prompt="$(prompt_user "Set up continuous background monitoring daemon? (y/n)" "y")"
-
+    enable_service_prompt="$(prompt_user "Configure continuous background monitoring service? (y/n)" "y")"
     local with_service=false
     if [[ "${enable_service_prompt}" =~ ^[Yy] ]]; then
         with_service=true
     fi
 
-    # Prompt 3: Confirmation
+    # Confirmation prompt
     echo ""
     local confirm_install
-    confirm_install="$(prompt_user "Ready to install InstallMon ${VERSION}. Proceed? (Y/n)" "y")"
+    confirm_install="$(prompt_user "Install InstallMon ${LATEST_VERSION} now? (Y/n)" "y")"
     if [[ ! "${confirm_install}" =~ ^[Yy] ]]; then
-        log_warn "Installation cancelled by user."
+        log_warn "Installation cancelled."
         exit 0
     fi
 
     echo ""
-    log_info "Downloading release package..."
+    log_info "Downloading release package (${TARGET_TRIPLE})..."
 
-    local archive_name="installmon-${VERSION}-${TARGET_TRIPLE}.tar.gz"
-    local download_url="${GITHUB_BASE}/releases/download/${VERSION}/${archive_name}"
-    local checksums_url="${GITHUB_BASE}/releases/download/${VERSION}/SHA256SUMS"
+    local archive_name="installmon-${LATEST_VERSION}-${TARGET_TRIPLE}.tar.gz"
+    local download_url="${GITHUB_BASE}/releases/download/${LATEST_VERSION}/${archive_name}"
+    local checksums_url="${GITHUB_BASE}/releases/download/${LATEST_VERSION}/SHA256SUMS"
 
     TMP_DIR="$(mktemp -d -t installmon-install.XXXXXX)"
     trap 'rm -rf "${TMP_DIR:-}"' EXIT INT TERM
@@ -259,7 +255,7 @@ perform_install() {
         exit 1
     fi
 
-    log_info "Verifying SHA-256 checksum..."
+    log_info "Verifying cryptographic SHA-256 checksum..."
     if curl -fsSL --retry 3 "${checksums_url}" -o "${TMP_DIR}/SHA256SUMS"; then
         local expected_hash
         expected_hash="$(grep -F "${archive_name}" "${TMP_DIR}/SHA256SUMS" | awk '{print $1}' || true)"
@@ -267,7 +263,7 @@ perform_install() {
             local actual_hash
             actual_hash="$(sha256sum "${TMP_DIR}/${archive_name}" | awk '{print $1}')"
             if [[ "${expected_hash}" != "${actual_hash}" ]]; then
-                log_error "SHA-256 checksum mismatch!\nExpected: ${expected_hash}\nActual:   ${actual_hash}"
+                log_error "Checksum mismatch!\nExpected: ${expected_hash}\nActual:   ${actual_hash}"
                 exit 1
             fi
             log_success "Checksum verified: ${actual_hash:0:16}..."
@@ -277,7 +273,7 @@ perform_install() {
     log_info "Extracting binary..."
     tar -xzf "${TMP_DIR}/${archive_name}" -C "${TMP_DIR}"
 
-    log_info "Installing to ${install_dir}/installmon..."
+    log_info "Placing binary in ${install_dir}/installmon..."
     if [[ "${is_system}" == "true" ]] && [[ $EUID -ne 0 ]]; then
         sudo mkdir -p "${install_dir}"
         sudo install -m 0755 "${TMP_DIR}/installmon" "${install_dir}/installmon"
@@ -286,7 +282,7 @@ perform_install() {
         install -m 0755 "${TMP_DIR}/installmon" "${install_dir}/installmon"
     fi
 
-    log_success "InstallMon successfully installed!"
+    log_success "InstallMon installed successfully!"
     "${install_dir}/installmon" --version
 
     # Check PATH
@@ -297,10 +293,10 @@ perform_install() {
         echo -e "     ${C_CYAN}export PATH=\"${install_dir}:\$PATH\"${C_RESET}"
     fi
 
-    # Set up background service if selected
+    # Background service setup
     if [[ "${with_service}" == "true" ]]; then
         echo ""
-        log_info "Configuring background monitoring daemon..."
+        log_info "Initializing background monitoring service..."
         if [[ "${is_system}" == "true" ]] && [[ $EUID -ne 0 ]]; then
             sudo "${install_dir}/installmon" --system service setup || true
         elif [[ "${is_system}" == "true" ]]; then
@@ -310,10 +306,10 @@ perform_install() {
         fi
     fi
 
-    # Prompt to launch TUI
+    # Launch TUI prompt
     echo ""
     local launch_tui
-    launch_tui="$(prompt_user "Would you like to launch the InstallMon TUI dashboard now? (y/n)" "n")"
+    launch_tui="$(prompt_user "Launch interactive InstallMon TUI dashboard now? (y/n)" "n")"
     if [[ "${launch_tui}" =~ ^[Yy] ]]; then
         exec "${install_dir}/installmon"
     else
@@ -326,23 +322,23 @@ perform_install() {
 }
 
 # ==============================================================================
-# Uninstallation Workflow
+# Uninstallation Routine
 # ==============================================================================
-perform_uninstall() {
-    echo -e "${C_BOLD}--- InstallMon Uninstallation ---${C_RESET}"
+uninstall_installmon() {
+    echo -e "${C_BOLD}--- Uninstallation ---${C_RESET}"
     echo ""
 
     local confirm
     confirm="$(prompt_user "Are you sure you want to uninstall InstallMon? (y/n)" "n")"
     if [[ ! "${confirm}" =~ ^[Yy] ]]; then
-        log_info "Uninstallation aborted."
+        log_info "Uninstallation cancelled."
         exit 0
     fi
 
     echo ""
     log_info "Stopping active services and systemd units..."
 
-    # Stop user and system services
+    # Stop active services
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user stop installmon >/dev/null 2>&1 || true
         if [[ $EUID -eq 0 ]]; then
@@ -355,7 +351,7 @@ perform_uninstall() {
     if [[ -f "${user_unit}" ]]; then
         rm -f "${user_unit}"
         command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload || true
-        log_success "Removed user service unit (${user_unit})"
+        log_success "Removed user service unit"
     fi
 
     local sys_unit="/etc/systemd/system/installmon.service"
@@ -363,24 +359,24 @@ perform_uninstall() {
         if [[ $EUID -eq 0 ]]; then
             rm -f "${sys_unit}"
             command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload || true
-            log_success "Removed system service unit (${sys_unit})"
+            log_success "Removed system service unit"
         else
-            log_warn "System unit found at ${sys_unit}. Re-run with sudo to remove system service."
+            log_warn "System unit at ${sys_unit} requires root. Run with sudo to remove."
         fi
     fi
 
-    # Terminate any lingering background daemon
+    # Terminate lingering background processes
     if pgrep -x installmon >/dev/null 2>&1; then
         killall -SIGTERM installmon 2>/dev/null || true
     fi
 
-    # Remove binaries
+    # Delete executable binaries
     log_info "Removing executable binaries..."
     for bin_path in "${HOME}/.local/bin/installmon" "/usr/local/bin/installmon" "/usr/bin/installmon"; do
         if [[ -f "${bin_path}" ]]; then
             if [[ -w "$(dirname "${bin_path}")" ]] || [[ $EUID -eq 0 ]]; then
                 rm -f "${bin_path}"
-                log_success "Deleted ${bin_path}"
+                log_success "Removed ${bin_path}"
             else
                 log_warn "Permission required to remove ${bin_path}. Run: sudo rm -f ${bin_path}"
             fi
@@ -391,17 +387,17 @@ perform_uninstall() {
     local user_data="${XDG_DATA_HOME:-${HOME}/.local/share}/installmon"
     rm -f "${user_data}/daemon.json" "${user_data}/daemon.log" 2>/dev/null || true
 
-    # Ask about database deletion
+    # Database retention vs purge prompt
     echo ""
     local delete_db
-    delete_db="$(prompt_user "Do you want to delete all database and tracking history? (y/n)" "n")"
+    delete_db="$(prompt_user "Also delete database and tracking history? (y/n)" "n")"
     if [[ "${delete_db}" =~ ^[Yy] ]]; then
         rm -rf "${user_data}"
         rm -rf "${HOME}/.config/installmon"
         if [[ $EUID -eq 0 ]]; then
             rm -rf "/var/lib/installmon" "/etc/installmon"
         fi
-        log_success "Database and configuration history deleted."
+        log_success "Database history purged."
     else
         log_info "Database preserved at: ${user_data}/installmon.db"
     fi
@@ -411,42 +407,47 @@ perform_uninstall() {
 }
 
 # ==============================================================================
-# Main Interactive Menu
+# Main Interactive Flow
 # ==============================================================================
 main() {
-    print_header
-    detect_environment
+    print_banner
+    detect_system
+    check_installation_status
 
-    # If user ran with --uninstall or -u or uninstall directly
-    if [[ "${1:-}" == "--uninstall" ]] || [[ "${1:-}" == "-u" ]] || [[ "${1:-}" == "uninstall" ]]; then
-        perform_uninstall
+    # Direct CLI shortcuts if passed
+    if [[ "${1:-}" == "uninstall" ]] || [[ "${1:-}" == "--uninstall" ]] || [[ "${1:-}" == "-u" ]]; then
+        uninstall_installmon
         exit 0
     fi
 
-    if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
-        echo "Usage: ./install.sh [uninstall|--uninstall|-h|--help]"
-        echo "Running without arguments starts the interactive setup assistant."
+    if [[ "${1:-}" == "install" ]] || [[ "${1:-}" == "--install" ]] || [[ "${1:-}" == "-i" ]]; then
+        install_installmon
         exit 0
     fi
 
-    check_existing_installation
-    resolve_version_and_target
-
-    echo -e "${C_BOLD}What would you like to do?${C_RESET}"
-    echo "  1) Install / Update InstallMon"
-    echo "  2) Uninstall InstallMon"
-    echo "  3) Exit"
+    # Interactive Menu
+    if [[ -n "${EXISTING_BIN}" ]]; then
+        echo -e "${C_BOLD}Select an action:${C_RESET}"
+        echo "  1) Reinstall / Update InstallMon (Recommended)"
+        echo "  2) Uninstall InstallMon & Clean Services"
+        echo "  3) Exit"
+    else
+        echo -e "${C_BOLD}Select an action:${C_RESET}"
+        echo "  1) Install InstallMon (Recommended)"
+        echo "  2) Uninstall / Clean Residual Data"
+        echo "  3) Exit"
+    fi
     echo ""
 
     local action_choice
-    action_choice="$(prompt_user "Select option [1-3]" "1")"
+    action_choice="$(prompt_user "Enter choice [1-3]" "1")"
 
     case "${action_choice}" in
         1)
-            perform_install
+            install_installmon
             ;;
         2)
-            perform_uninstall
+            uninstall_installmon
             ;;
         3)
             echo "Exiting."
@@ -454,7 +455,7 @@ main() {
             ;;
         *)
             log_warn "Invalid selection. Proceeding with installation..."
-            perform_install
+            install_installmon
             ;;
     esac
 }

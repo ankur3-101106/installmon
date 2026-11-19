@@ -233,28 +233,25 @@ installmon/
 
 ## F. Installation
 
-### 1. Interactive Installation Assistant (Recommended)
+### 1. Unified Setup & Lifecycle Assistant (Recommended)
 
-InstallMon includes a friendly, interactive setup assistant that automatically inspects your system and guides you through setup without requiring command-line flags:
-- Identifies CPU architecture (`x86_64` or `aarch64`).
-- Identifies Linux distribution and C library (`glibc` or `musl`).
-- Prompts for installation mode (User mode in `~/.local/bin` or System mode in `/usr/local/bin`).
-- Prompts to automatically configure and enable the continuous background daemon.
-- Downloads the verified static binary and verifies its SHA-256 hash.
-- Offers an integrated uninstallation wizard.
+InstallMon provides a single, unified interactive script for **installation, updating, and uninstallation**:
+- Automatically identifies CPU architecture (`x86_64` or `aarch64`).
+- Automatically identifies Linux distribution and C library (`glibc` or `musl`).
+- Prompts for installation mode (User mode in `~/.local/bin` [default, no sudo needed] or System mode in `/usr/local/bin`).
+- Prompts to configure and enable the continuous background daemon.
+- Downloads the matching static binary and verifies its cryptographic SHA-256 hash.
+- Provides an integrated uninstallation and data purge wizard.
 
-#### One-Line Interactive Run:
+#### One Command for Everything (Install • Update • Uninstall):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ankur3-101106/installmon/main/install.sh | bash
 ```
 
 #### Run from Local Repository:
 ```bash
-# Launch interactive installer:
+# Launch interactive assistant:
 ./install.sh
-
-# Or directly launch uninstaller:
-./install.sh uninstall
 ```
 
 ### 2. Downloading Prebuilt Release Archives
